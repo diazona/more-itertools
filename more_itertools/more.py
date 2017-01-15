@@ -29,6 +29,7 @@ __all__ = [
     'one',
     'padded',
     'peekable',
+    'pushback',
     'side_effect',
     'sliced',
     'sort_together',
@@ -957,3 +958,74 @@ def sort_together(iterables, key_list=(0,), reverse=False):
     return list(zip(*sorted(zip(*iterables),
                             key=itemgetter(*key_list),
                             reverse=reverse)))
+
+# Adapted from https://stackoverflow.com/a/1517982/56541
+def pushback(iterable, maxlen=None):
+    """Wrap an iterable to allow injecting elements into the iteration
+    sequence.
+
+    Injecting/pushing back is done with the ``send()`` method. Calling
+    ``send(x)`` pushes ``x`` on a stack, and ``next()`` (or equivalently
+    ``send(None)``)  pops and yields the top of the stack, unless the
+    stack is empty, in which case it goes to the underlying iterator to
+    get a value to yield.
+
+        >>> it = pushback(range(10))
+        >>> next(it)
+        0
+        >>> it.send(9)
+        >>> next(it)
+        9
+        >>> next(it), next(it)
+        (1, 2)
+        >>> it.send(15)
+        >>> it.send(12)
+        >>> it.send(24)
+        >>> list(it)
+        [24, 12, 15, 3, 4, 5, 6, 7, 8, 9]
+
+    You need to call ``next()`` on the iterator at least once before
+    using ``send()``, so it is not possible to push back anything before
+    consuming the first element from the underlying iterable.
+
+        >>> it = pushback(range(5))
+        >>> it.send(30)
+        TypeError: can't send non-None value to a just-started generator
+
+    Typically the best way around this is to just deal with the values
+    you'd be pushing before starting to consume the ``pushback`` iterator.
+    But it is possible to get around the limitation like this:
+
+        >>> it = pushback(range(5))
+        >>> it.send(next(it))
+        >>> it.send(30)
+        >>> list(it)
+        [30, 0, 1, 2, 3, 4]
+
+    The optional ``maxlen`` argument specifies the maximum size of the
+    stack, in the same sense as with ``collections.deque``. Setting
+    ``maxlen=1`` can be useful if you want a pushed element to replace
+    any previously pushed element.
+
+        >>> it = pushback(range(5), maxlen=1)
+        >>> next(it)
+        0
+        >>> it.send(11)
+        >>> it.send(12)
+        >>> it.send(13)
+        >>> list(it)
+        [13, 1, 2, 3, 4]
+
+    """
+    iterable = iter(iterable)
+    # add 1 to account for the append(None)
+    stack = deque(maxlen=maxlen + 1 if maxlen is not None else None)
+    while True:
+        if stack:
+            e = stack.pop()
+        else:
+            e = next(iterable)
+        sent = yield e
+        if sent is not None:
+            stack.append(sent)
+            stack.append(None) # dummy value to return from send()
