@@ -743,3 +743,108 @@ class SortTogetherTest(TestCase):
             [('CT', 'CT', 'CT', 'GA', 'GA', 'GA'),
              ('June', 'July', 'July', 'May', 'Aug.', 'May'),
              (70, 100, 20, 97, 20, 100)])
+
+class PushbackTest(TestCase):
+    """Tests for pushback()"""
+    def test_passthrough(self):
+        """Tests passing through an iterable without pushing anything"""
+        expected = [1, 2, 3, 4, 5]
+        actual = list(pushback(expected))
+        eq_(actual, expected)
+    def test_first_push(self):
+        """Tests pushing before consuming anything"""
+        it = pushback(range(5))
+        it.send(next(it))
+        it.send(10)
+        actual = list(it)
+        expected = [10, 0, 1, 2, 3, 4]
+    def test_second_push(self):
+        """Tests pushing after consuming only one element"""
+        it = pushback(range(5))
+        actual = [next(it)]
+        it.send(10)
+        actual += list(it)
+        expected = [0, 10, 1, 2, 3, 4]
+        eq_(actual, expected)
+    def test_last_push(self):
+        """Tests pushing after consuming the entire underlying iterable"""
+        it = pushback(range(5))
+        actual = [next(it), next(it), next(it), next(it), next(it)]
+        it.send(10)
+        actual += [next(it)]
+        expected = [0, 1, 2, 3, 4, 10]
+        eq_(actual, expected)
+    def test_multi_push(self):
+        """Tests pushing multiple elements and getting them in reverse order"""
+        it = pushback(range(5))
+        actual = [next(it), next(it)]
+        it.send(10)
+        it.send(11)
+        it.send(12)
+        actual += list(it)
+        expected = [0, 1, 12, 11, 10, 2, 3, 4]
+        eq_(actual, expected)
+    def test_interleaved_push(self):
+        """Tests pushes interleaved with consuming from the underlying iterable"""
+        it = pushback(range(5))
+        actual = [next(it)]
+        it.send(10)
+        actual += [next(it), next(it)]
+        it.send(11)
+        actual += [next(it), next(it)]
+        it.send(12)
+        actual += [next(it), next(it)]
+        it.send(13)
+        actual += [next(it), next(it)]
+        expected = [0, 10, 1, 11, 2, 12, 3, 13, 4]
+        eq_(actual, expected)
+    def test_empty(self):
+        """Tests pushing in front of an empty iterable"""
+        it = pushback([])
+        it.send(10)
+        actual = list(it)
+        expected = [10]
+        eq_(actual, expected)
+    def test_maxlen_1(self):
+        """Tests the maxlen option"""
+        it = pushback(range(5), maxlen=1)
+        actual = [next(it), next(it)]
+        it.send(10)
+        it.send(11)
+        it.send(12)
+        actual += list(it)
+        expected = [0, 1, 12, 2, 3, 4]
+        eq_(actual, expected)
+    def test_maxlen_3(self):
+        """Tests the maxlen option with a larger value"""
+        it = pushback(range(5), maxlen=3)
+        actual = [next(it), next(it)]
+        it.send(10)
+        it.send(11)
+        it.send(12)
+        it.send(13)
+        actual += list(it)
+        expected = [0, 1, 13, 12, 11, 2, 3, 4]
+        eq_(actual, expected)
+    def test_maxlen_0(self):
+        """Tests the maxlen option with a value of zero (making pushback useless)"""
+        it = pushback(range(5), maxlen=0)
+        actual = [next(it), next(it)]
+        it.send(10)
+        it.send(11)
+        actual += list(it)
+        expected = [0, 1, 2, 3, 4]
+        eq_(actual, expected)
+    def test_maxlen_none(self):
+        """Tests that passing None to maxlen allows many pushed elements"""
+        it = pushback(range(5), maxlen=None)
+        actual = [next(it), next(it)]
+        it.send(10)
+        it.send(11)
+        it.send(12)
+        it.send(13)
+        it.send(14)
+        it.send(15)
+        actual += list(it)
+        expected = [0, 1, 15, 14, 13, 12, 11, 10, 2, 3, 4]
+        eq_(actual, expected)

@@ -29,6 +29,7 @@ __all__ = [
     'one',
     'padded',
     'peekable',
+    'pushback',
     'side_effect',
     'sliced',
     'sort_together',
@@ -957,3 +958,60 @@ def sort_together(iterables, key_list=(0,), reverse=False):
     return list(zip(*sorted(zip(*iterables),
                             key=itemgetter(*key_list),
                             reverse=reverse)))
+
+# Inspired by https://stackoverflow.com/a/1517982
+class pushback:
+    """Wrap an iterable to allow injecting elements into the iteration
+    sequence.
+
+    Injecting/pushing back is done with the ``send()`` method. Calling
+    ``send(x)`` pushes ``x`` on a stack, and ``next()`` (or equivalently
+    ``send(None)``)  pops and yields the top of the stack, unless the
+    stack is empty, in which case it goes to the underlying iterator to
+    get a value to yield.
+
+        >>> it = pushback(range(10))
+        >>> next(it)
+        0
+        >>> it.send(9)
+        >>> next(it)
+        9
+        >>> next(it), next(it)
+        (1, 2)
+        >>> it.send(15)
+        >>> it.send(12)
+        >>> it.send(24)
+        >>> list(it)
+        [24, 12, 15, 3, 4, 5, 6, 7, 8, 9]
+
+    This is not implemented as a generator, so you can push items even before
+    consuming the underlying iterable.
+
+        >>> it = pushback(range(5))
+        >>> it.send(30)
+        >>> list(it)
+        (30, 0, 1, 2, 3, 4)
+
+    The optional ``maxlen`` argument specifies the maximum size of the stack,
+    in the same sense as with ``collections.deque``. Setting ``maxlen=1`` can
+    be useful if you want to keep only the last element pushed.
+
+        >>> it = pushback(range(5), maxlen=1)
+        >>> next(it)
+        0
+        >>> it.send(11)
+        >>> it.send(12)
+        >>> it.send(13)
+        >>> list(it)
+        [13, 1, 2, 3, 4]
+
+    """
+    def __init__(self, iterable, maxlen=None):
+        self.iterable = iter(iterable)
+        self.stack = deque(maxlen=maxlen)
+    def __iter__(self):
+        return self
+    def __next__(self):
+        return self.stack.pop() if self.stack else next(self.iterable)
+    def send(self, value):
+        self.stack.append(value)
